@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react"
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 
 const trackOptions = [
   {
@@ -23,6 +24,7 @@ type RegistrationErrors = Partial<
 >
 
 export default function RegisterPage() {
+  const router = useRouter()
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
@@ -73,6 +75,14 @@ export default function RegisterPage() {
       setMessage(data?.message ?? "Thank you for registering! We'll be in touch shortly.")
       setErrors({})
       form.reset()
+
+      const query = new URLSearchParams({
+        name: payload.name,
+        email: payload.email,
+        phone: payload.phone,
+      })
+
+      router.push(`/register/payment?${query.toString()}`)
     } catch (error) {
       setStatus("error")
       setMessage("Unable to submit the form right now. Please try again later.")
