@@ -5,6 +5,9 @@ import { GeistMono } from "geist/font/mono"
 import { Analytics } from "@vercel/analytics/next"
 import { Playfair_Display } from "next/font/google"
 import { Suspense } from "react"
+
+import { SiteFooter } from "@/components/footer"
+
 import "./globals.css"
 
 export const metadata: Metadata = {
@@ -27,7 +30,12 @@ export default function RootLayout({
   return (
     <html lang="en" className="dark">
       <body className={`font-sans ${GeistSans.variable} ${GeistMono.variable} ${playfair.variable} antialiased`}>
-        <Suspense fallback={<div>Loading...</div>}>{children}</Suspense>
+        <div className="flex min-h-screen flex-col">
+          <Suspense fallback={<div>Loading...</div>}>
+            <div className="flex-1">{children}</div>
+          </Suspense>
+          <SiteFooter />
+        </div>
         <Analytics />
       </body>
     </html>
