@@ -41,9 +41,12 @@ export default function SignInPage() {
           return
         }
       } else {
+        const nextParam = searchParams.get("next")
+        const emailRedirectTo = `${window.location.origin}/signin${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`
         const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
+          options: { emailRedirectTo },
         })
         if (signUpError) {
           setError(signUpError.message)
