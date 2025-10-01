@@ -1,8 +1,10 @@
 "use client"
 
-import { FormEvent, useState } from "react"
+import { FormEvent, useEffect, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+
+import { supabaseBrowser } from "@/lib/supabase/client"
 
 const trackOptions = [
   {
@@ -29,6 +31,21 @@ export default function RegisterPage() {
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
   const [errors, setErrors] = useState<RegistrationErrors>({})
+
+  useEffect(() => {
+    let isMounted = true
+    const checkAuth = async () => {
+      const { data } = await supabaseBrowser.auth.getSession()
+      if (!data.session && isMounted) {
+        const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register"
+        router.replace(`/signin?next=${encodeURIComponent(next)}`)
+      }
+    }
+    void checkAuth()
+    return () => {
+      isMounted = false
+    }
+  }, [router])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
