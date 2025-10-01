@@ -14,6 +14,7 @@ export default function SignInPage() {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"signin" | "signup">("signin")
+  const [fullName, setFullName] = useState("")
 
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
   const isAuthConfigured = Boolean(supabase)
@@ -47,6 +48,19 @@ export default function SignInPage() {
         if (signUpError) {
           setError(signUpError.message)
           return
+        }
+
+        // Save profile details if provided
+        if (fullName.trim()) {
+          const { data: userData } = await supabase.auth.getUser()
+          const userId = userData.user?.id
+          if (userId) {
+            await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ userId, full_name: fullName.trim(), email: email.trim() }),
+            }).catch(() => {})
+          }
         }
       }
 
@@ -92,6 +106,18 @@ export default function SignInPage() {
           ) : null}
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
+            {mode === "signup" ? (
+              <label className="block space-y-2 text-sm text-blue-100/80">
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Full name</span>
+                <input
+                  type="text"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  placeholder="Enter your full name"
+                  className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                />
+              </label>
+            ) : null}
             <label className="block space-y-2 text-sm text-blue-100/80">
               <span className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Email</span>
               <input

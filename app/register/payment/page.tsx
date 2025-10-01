@@ -226,11 +226,24 @@ export default function PaymentPage() {
         theme: {
           color: "#2563EB",
         },
-        handler: () => {
-          setStatus("success")
-          setMessage(
-            "Payment successful! Our team will share onboarding details shortly.",
-          )
+        handler: async () => {
+          // Mark enrollment as paid in Supabase
+          try {
+            const { data: userData } = await supabase!.auth.getUser()
+            const userId = userData.user?.id
+            if (userId) {
+              await fetch("/api/enroll/paid", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ userId, planId: selectedPlan.id }),
+              })
+            }
+            setStatus("success")
+            setMessage("Payment successful! Your enrollment is confirmed.")
+          } catch {
+            setStatus("error")
+            setMessage("Payment succeeded, but we couldn't update your enrollment. Contact support.")
+          }
         },
         modal: {
           ondismiss: () => {
