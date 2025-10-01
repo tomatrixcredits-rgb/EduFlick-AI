@@ -41,7 +41,7 @@ export default function SignInPage() {
           return
         }
       } else {
-        const { error: signUpError } = await supabase.auth.signUp({
+        const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         })
@@ -52,8 +52,7 @@ export default function SignInPage() {
 
         // Save profile details if provided
         if (fullName.trim()) {
-          const { data: userData } = await supabase.auth.getUser()
-          const userId = userData.user?.id
+          const userId = signUpData?.user?.id
           if (userId) {
             await fetch("/api/profile", {
               method: "POST",
