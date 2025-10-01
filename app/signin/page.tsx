@@ -1,10 +1,10 @@
 "use client"
 
-import { useState } from "react"
+import { useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
-import { supabaseBrowser } from "@/lib/supabase/client"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -15,13 +15,23 @@ export default function SignInPage() {
   const [error, setError] = useState<string | null>(null)
   const [mode, setMode] = useState<"signin" | "signup">("signin")
 
+  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+  const isAuthConfigured = Boolean(supabase)
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
     setError(null)
     setIsSubmitting(true)
     try {
+      if (!supabase) {
+        setError(
+          "Authentication is not configured. Please contact the Eduflick AI team to finish setting up Supabase.",
+        )
+        return
+      }
+
       if (mode === "signin") {
-        const { error: signInError } = await supabaseBrowser.auth.signInWithPassword({
+        const { error: signInError } = await supabase.auth.signInWithPassword({
           email: email.trim(),
           password,
         })
@@ -30,7 +40,7 @@ export default function SignInPage() {
           return
         }
       } else {
-        const { error: signUpError } = await supabaseBrowser.auth.signUp({
+        const { error: signUpError } = await supabase.auth.signUp({
           email: email.trim(),
           password,
         })
@@ -74,6 +84,13 @@ export default function SignInPage() {
             <p className="text-sm text-blue-100/80">Sign in to continue to registration and payment.</p>
           </div>
 
+          {!isAuthConfigured ? (
+            <div className="mt-6 rounded-2xl border border-red-500/40 bg-red-500/10 p-4 text-sm text-red-100" role="alert">
+              Supabase credentials are missing. Add NEXT_PUBLIC_SUPABASE_URL and NEXT_PUBLIC_SUPABASE_ANON_KEY to your
+              environment, then refresh this page.
+            </div>
+          ) : null}
+
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             <label className="block space-y-2 text-sm text-blue-100/80">
               <span className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Email</span>
@@ -106,7 +123,7 @@ export default function SignInPage() {
 
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isAuthConfigured}
               className="inline-flex w-full items-center justify-center rounded-full bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? (mode === "signin" ? "Signing in..." : "Creating account...") : mode === "signin" ? "Sign in" : "Create account"}

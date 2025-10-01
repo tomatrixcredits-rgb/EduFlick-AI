@@ -1,7 +1,9 @@
 "use client"
 
+import Link from "next/link"
 import type React from "react"
 import { useEffect, useState } from "react"
+
 import { cn } from "@/lib/utils"
 
 const SECTIONS = ["experience", "overview", "pricing", "faq"] as const
@@ -84,9 +86,8 @@ export function Navbar({ className }: { className?: string }) {
           ))}
         </nav>
 
-        <a
-          href="#pricing"
-          onClick={(e) => scrollToSection(e, "pricing")}
+        <Link
+          href="/signin"
           className={cn(
             "inline-flex items-center justify-center rounded-xl px-4 py-2 text-sm font-medium",
             "bg-blue-500 text-white transition-colors hover:bg-blue-400",
@@ -94,8 +95,8 @@ export function Navbar({ className }: { className?: string }) {
             "ring-1 ring-inset ring-blue-200/40",
           )}
         >
-          Join the cohort
-        </a>
+          Log in
+        </Link>
       </div>
     </header>
   )
