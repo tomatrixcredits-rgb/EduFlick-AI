@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 
 import { paymentPlans, type PaymentPlan } from "@/lib/plans"
+import { supabaseBrowser } from "@/lib/supabase/client"
 
 type PaymentStatus = "idle" | "creating-order" | "waiting-payment" | "success" | "error"
 
@@ -71,6 +72,21 @@ export default function PaymentPage() {
   const [status, setStatus] = useState<PaymentStatus>("idle")
   const [message, setMessage] = useState("")
   const [isCheckoutReady, setIsCheckoutReady] = useState(false)
+
+  useEffect(() => {
+    let isMounted = true
+    const checkAuth = async () => {
+      const { data } = await supabaseBrowser.auth.getSession()
+      if (!data.session && isMounted) {
+        const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register/payment"
+        window.location.replace(`/signin?next=${encodeURIComponent(next)}`)
+      }
+    }
+    void checkAuth()
+    return () => {
+      isMounted = false
+    }
+  }, [])
 
   useEffect(() => {
     const name = searchParams.get("name")
