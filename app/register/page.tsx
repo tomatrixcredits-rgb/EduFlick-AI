@@ -1,10 +1,10 @@
 "use client"
 
-import { FormEvent, useEffect, useState } from "react"
+import { FormEvent, useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
-import { supabaseBrowser } from "@/lib/supabase/client"
+import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
 const trackOptions = [
   {
@@ -32,10 +32,17 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("")
   const [errors, setErrors] = useState<RegistrationErrors>({})
 
+  const supabase = useMemo(() => getSupabaseBrowserClient(), [])
+
   useEffect(() => {
+    if (!supabase) {
+      setStatus("error")
+      setMessage("Authentication is not configured. Please contact the Eduflick AI team.")
+      return
+    }
     let isMounted = true
     const checkAuth = async () => {
-      const { data } = await supabaseBrowser.auth.getSession()
+      const { data } = await supabase.auth.getSession()
       if (!data.session && isMounted) {
         const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
@@ -45,7 +52,7 @@ export default function RegisterPage() {
     return () => {
       isMounted = false
     }
-  }, [router])
+  }, [router, supabase])
 
   const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -224,7 +231,7 @@ export default function RegisterPage() {
             </label>
             <button
               type="submit"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !supabase}
               className="inline-flex w-full items-center justify-center rounded-full bg-blue-500 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-blue-400 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-70"
             >
               {isSubmitting ? "Submitting..." : "Submit & Continue to Payment"}

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server"
 import { z } from "zod"
 
-import { supabaseAdmin } from "@/lib/supabase/server"
+import { getSupabaseAdminClient } from "@/lib/supabase/server"
 
 const trackSchema = z.enum([
   "ai-content",
@@ -60,7 +60,19 @@ export async function POST(request: Request) {
 
   const { name, email, phone, track } = result.data
 
-  const { error } = await supabaseAdmin.from("registrations").insert({
+  const supabase = getSupabaseAdminClient()
+
+  if (!supabase) {
+    return NextResponse.json(
+      {
+        message:
+          "Supabase is not configured. Please verify the server credentials and try again.",
+      },
+      { status: 500 },
+    )
+  }
+
+  const { error } = await supabase.from("registrations").insert({
     name,
     email,
     phone,
