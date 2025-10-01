@@ -95,8 +95,37 @@ export default function RegisterPage() {
         return
       }
 
+      // Create an enrollment row linked to the authenticated user
+      const { data: userData } = await supabase!.auth.getUser()
+      const userId = userData.user?.id
+      if (!userId) {
+        setStatus("error")
+        setMessage("You need to be logged in to complete enrollment.")
+        return
+      }
+
+      const enrollResponse = await fetch("/api/enroll", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId,
+          name: payload.name,
+          email: payload.email,
+          phone: payload.phone,
+          track: payload.track,
+        }),
+      })
+
+      const enrollJson = await enrollResponse.json().catch(() => null)
+      if (!enrollResponse.ok) {
+        setStatus("error")
+        setMessage(enrollJson?.message ?? "Unable to create enrollment. Please try again.")
+        setErrors((enrollJson?.errors as RegistrationErrors) ?? {})
+        return
+      }
+
       setStatus("success")
-      setMessage(data?.message ?? "Thank you for registering! We'll be in touch shortly.")
+      setMessage("Enrollment created. Proceed to payment.")
       setErrors({})
       form.reset()
 
