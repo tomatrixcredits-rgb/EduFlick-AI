@@ -56,7 +56,6 @@ export async function POST(request: Request) {
           id: userId,
           full_name: name ?? null,
           phone: phone ?? null,
-          email: email ?? null,
         },
         { onConflict: "id" },
       )

@@ -7,7 +7,6 @@ const bodySchema = z.object({
   userId: z.string().uuid(),
   full_name: z.string().min(2).max(120).optional(),
   phone: z.string().min(6).max(40).optional(),
-  email: z.string().email().optional(),
 })
 
 export async function POST(request: Request) {
@@ -33,7 +32,7 @@ export async function POST(request: Request) {
     )
   }
 
-  const { userId, full_name, phone, email } = parsed.data
+  const { userId, full_name, phone } = parsed.data
 
   const supabase = getSupabaseAdminClient()
   if (!supabase) {
@@ -50,7 +49,6 @@ export async function POST(request: Request) {
         id: userId,
         full_name: full_name ?? null,
         phone: phone ?? null,
-        email: email ?? null,
       },
       { onConflict: "id" },
     )
