@@ -87,6 +87,38 @@ export default function PaymentPage() {
       if (!data.session && isMounted) {
         const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register/payment"
         window.location.replace(`/signin?next=${encodeURIComponent(next)}`)
+        return
+      }
+
+      // If logged in, enforce correct stage and presence of enrollment
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id
+      if (!userId) return
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_stage")
+        .eq("id", userId)
+        .maybeSingle()
+      const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
+      if (stage === "active") {
+        window.location.replace("/dashboard")
+        return
+      }
+      if (!stage || stage === "new") {
+        window.location.replace("/register")
+        return
+      }
+      // If no enrollment exists yet, send back to registration
+      const { data: enroll } = await supabase
+        .from("enrollments")
+        .select("id")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      if (!enroll?.id) {
+        window.location.replace("/register")
+        return
       }
     }
     void checkAuth()

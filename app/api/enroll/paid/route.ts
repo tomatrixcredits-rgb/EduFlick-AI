@@ -77,6 +77,19 @@ export async function POST(request: Request) {
     )
   }
 
+  // Mark user as active in profiles
+  const { error: stageError } = await supabase
+    .from("profiles")
+    .update({ onboarding_stage: "active" })
+    .eq("id", userId)
+
+  if (stageError) {
+    return NextResponse.json(
+      { message: "Payment marked as paid, but failed to update onboarding stage", errors: { form: [stageError.message] } },
+      { status: 500 },
+    )
+  }
+
   return NextResponse.json({ message: "Enrollment marked as paid" })
 }
 
