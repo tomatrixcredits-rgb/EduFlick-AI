@@ -90,6 +90,22 @@ export async function POST(request: Request) {
     )
   }
 
+  // Update onboarding stage to payment_pending
+  const { error: stageError } = await supabase
+    .from("profiles")
+    .update({ onboarding_stage: "payment_pending" })
+    .eq("id", userId)
+
+  if (stageError) {
+    return NextResponse.json(
+      {
+        message: "Enrollment created but unable to update onboarding stage",
+        errors: { form: [stageError.message] },
+      },
+      { status: 500 },
+    )
+  }
+
   return NextResponse.json({ message: "Enrollment created" }, { status: 201 })
 }
 

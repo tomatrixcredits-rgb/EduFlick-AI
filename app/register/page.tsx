@@ -46,6 +46,26 @@ export default function RegisterPage() {
       if (!data.session && isMounted) {
         const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
+        return
+      }
+
+      // If logged in, redirect based on onboarding/enrollment status
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id
+      if (!userId) return
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_stage, email")
+        .eq("id", userId)
+        .maybeSingle()
+      const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
+      if (stage === "active") {
+        router.replace("/dashboard")
+        return
+      }
+      if (stage === "payment_pending") {
+        router.replace("/register/payment")
+        return
       }
     }
     void checkAuth()
@@ -78,6 +98,13 @@ export default function RegisterPage() {
     setErrors({})
 
     try {
+      // Keep email in sync with auth email
+      const { data: userData } = await supabase!.auth.getUser()
+      const authEmail = userData.user?.email?.trim().toLowerCase()
+      if (authEmail && payload.email.trim().toLowerCase() !== authEmail) {
+        payload.email = authEmail
+      }
+
       const response = await fetch("/api/register", {
         method: "POST",
         headers: {
@@ -96,7 +123,6 @@ export default function RegisterPage() {
       }
 
       // Create an enrollment row linked to the authenticated user
-      const { data: userData } = await supabase!.auth.getUser()
       const userId = userData.user?.id
       if (!userId) {
         setStatus("error")

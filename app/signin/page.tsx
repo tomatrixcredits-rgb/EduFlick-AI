@@ -20,7 +20,53 @@ export default function SignInPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
   const isAuthConfigured = Boolean(supabase)
 
-  // If returning from OAuth, upsert profile and redirect to next or /register
+  const routeByStatus = useMemo(() => {
+    return async () => {
+      if (!supabase) return
+      // Admins handled separately by caller
+      const { data: userData } = await supabase.auth.getUser()
+      const userId = userData.user?.id
+      if (!userId) {
+        router.replace("/register")
+        return
+      }
+      // Prefer onboarding_stage if present
+      const { data: profile } = await supabase
+        .from("profiles")
+        .select("onboarding_stage")
+        .eq("id", userId)
+        .maybeSingle()
+      const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
+      if (stage === "active") {
+        router.replace("/dashboard")
+        return
+      }
+      if (stage === "payment_pending") {
+        router.replace("/register/payment")
+        return
+      }
+      // Fallback to latest enrollment
+      const { data: enroll } = await supabase
+        .from("enrollments")
+        .select("payment_status")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+      const paymentStatus = (enroll as { payment_status?: string | null } | null)?.payment_status
+      if (paymentStatus === "paid") {
+        router.replace("/dashboard")
+        return
+      }
+      if (paymentStatus === "pending") {
+        router.replace("/register/payment")
+        return
+      }
+      router.replace("/register")
+    }
+  }, [router, supabase])
+
+  // If returning from OAuth, upsert profile and redirect according to status
   // Also, if already signed in, redirect out of signin page
   useEffect(() => {
     if (!supabase) return
@@ -49,7 +95,6 @@ export default function SignInPage() {
             }
           }
         } finally {
-          const next = searchParams.get("next")
           // If the signed-in user is an admin, send directly to the admin dashboard
           const { data: userData } = await supabase.auth.getUser()
           const userEmail = userData.user?.email
@@ -57,7 +102,7 @@ export default function SignInPage() {
             router.replace("/admin")
             return
           }
-          router.replace(next || "/register")
+          await routeByStatus()
         }
       }
     }
@@ -65,7 +110,7 @@ export default function SignInPage() {
     return () => {
       isMounted = false
     }
-  }, [router, searchParams, supabase])
+  }, [routeByStatus, router, searchParams, supabase])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -121,8 +166,7 @@ export default function SignInPage() {
         router.replace("/admin")
         return
       }
-      const next = searchParams.get("next")
-      router.replace(next || "/register")
+      await routeByStatus()
     } catch (err) {
       setError(err instanceof Error ? err.message : "Sign in failed")
     } finally {
