@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
@@ -18,6 +18,46 @@ export default function SignInPage() {
 
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
   const isAuthConfigured = Boolean(supabase)
+
+  // If returning from OAuth, upsert profile and redirect to next or /register
+  // Also, if already signed in, redirect out of signin page
+  useEffect(() => {
+    if (!supabase) return
+    let isMounted = true
+    const maybeHandleOAuthReturn = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!isMounted) return
+      if (data.session) {
+        try {
+          if (searchParams.get("from") === "oauth") {
+            const { data: userData } = await supabase.auth.getUser()
+            const user = userData.user
+            if (user) {
+              await fetch("/api/profile", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                  userId: user.id,
+                  full_name:
+                    (user.user_metadata?.full_name as string | undefined) ||
+                    (user.user_metadata?.name as string | undefined) ||
+                    undefined,
+                  email: user.email ?? undefined,
+                }),
+              }).catch(() => {})
+            }
+          }
+        } finally {
+          const next = searchParams.get("next")
+          router.replace(next || "/register")
+        }
+      }
+    }
+    void maybeHandleOAuthReturn()
+    return () => {
+      isMounted = false
+    }
+  }, [router, searchParams, supabase])
 
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault()
@@ -75,6 +115,35 @@ export default function SignInPage() {
     }
   }
 
+  const handleGoogleSignIn = async () => {
+    setError(null)
+    if (!supabase) {
+      setError(
+        "Authentication is not configured. Please contact the Eduflick AI team to finish setting up Supabase.",
+      )
+      return
+    }
+    setIsSubmitting(true)
+    try {
+      const nextParam = searchParams.get("next")
+      const redirectTo = `${window.location.origin}/signin${
+        nextParam ? `?next=${encodeURIComponent(nextParam)}&from=oauth` : "?from=oauth"
+      }`
+      const { error: oauthError } = await supabase.auth.signInWithOAuth({
+        provider: "google",
+        options: { redirectTo },
+      })
+      if (oauthError) {
+        setError(oauthError.message)
+      }
+      // On success, browser will redirect; no further action here
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Google sign-in failed")
+    } finally {
+      setIsSubmitting(false)
+    }
+  }
+
   return (
     <main className="relative min-h-screen overflow-hidden bg-[#030616] text-white">
       <div aria-hidden className="pointer-events-none fixed inset-0 bg-[radial-gradient(circle_at_top,_rgba(59,130,246,0.2),_rgba(29,78,216,0.15),_transparent_75%)]" />
@@ -106,6 +175,22 @@ export default function SignInPage() {
               environment, then refresh this page.
             </div>
           ) : null}
+
+          <div className="mt-8 space-y-4">
+            <button
+              type="button"
+              onClick={handleGoogleSignIn}
+              disabled={isSubmitting || !isAuthConfigured}
+              className="inline-flex w-full items-center justify-center gap-2 rounded-full border border-blue-200/20 bg-white/10 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-400/60 disabled:cursor-not-allowed disabled:opacity-70"
+            >
+              {isSubmitting ? "Redirecting..." : "Continue with Google"}
+            </button>
+            <div className="flex items-center gap-3">
+              <div className="h-px flex-1 bg-white/10" />
+              <span className="text-xs text-blue-100/60">or</span>
+              <div className="h-px flex-1 bg-white/10" />
+            </div>
+          </div>
 
           <form className="mt-8 space-y-5" onSubmit={handleSubmit}>
             {mode === "signup" ? (
