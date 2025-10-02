@@ -5,6 +5,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
+import { isAdminEmail } from "@/lib/auth"
 
 export default function SignInPage() {
   const router = useRouter()
@@ -49,6 +50,13 @@ export default function SignInPage() {
           }
         } finally {
           const next = searchParams.get("next")
+          // If the signed-in user is an admin, send directly to the admin dashboard
+          const { data: userData } = await supabase.auth.getUser()
+          const userEmail = userData.user?.email
+          if (isAdminEmail(userEmail)) {
+            router.replace("/admin")
+            return
+          }
           router.replace(next || "/register")
         }
       }
@@ -106,6 +114,13 @@ export default function SignInPage() {
         }
       }
 
+      // After any successful sign-in, route admins to /admin directly
+      const { data: userData } = await supabase.auth.getUser()
+      const userEmail = userData.user?.email
+      if (isAdminEmail(userEmail)) {
+        router.replace("/admin")
+        return
+      }
       const next = searchParams.get("next")
       router.replace(next || "/register")
     } catch (err) {
