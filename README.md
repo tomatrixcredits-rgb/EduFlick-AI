@@ -74,6 +74,22 @@ Because inserts come from the service role key, no additional public policies ar
 
 These steps ensure Supabase manages account security, while the application stores onboarding details in a dedicated table tied to the authenticated user journey.
 
+### 5. Enable password reset (Forgot/Reset password)
+
+1. In Supabase Dashboard, go to Auth → Providers → Email and ensure Email auth is enabled.
+2. Go to Auth → URL Configuration:
+   - Set Site URL to your deployed domain (e.g. `https://your-domain.com`). For local development, Supabase uses this value to build redirect URLs.
+   - Add the following to Additional Redirect URLs:
+     - `http://localhost:3000/reset-password`
+     - `https://your-domain.com/reset-password`
+3. Optional: Customize the Reset Password email in Auth → Templates → Reset Password.
+4. In the app:
+   - Users request a reset at `/forgot-password`. This calls `supabase.auth.resetPasswordForEmail(email, { redirectTo: "<origin>/reset-password" })`.
+   - Users receive a magic recovery link. After clicking, Supabase redirects to `/reset-password` with a recovery session.
+   - On `/reset-password`, we detect the recovery session and call `supabase.auth.updateUser({ password: "newPassword" })`.
+
+No additional database changes or policies are required for this flow.
+
 ## How It Works
 
 1. Create and modify your project using [v0.app](https://v0.app)
