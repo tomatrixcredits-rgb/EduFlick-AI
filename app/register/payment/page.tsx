@@ -94,7 +94,7 @@ export default function PaymentPage() {
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
       if (!userId) return
-
+      // Check latest enrollment first
       const { data: enroll } = await supabase
         .from("enrollments")
         .select("id, payment_status")
@@ -102,26 +102,27 @@ export default function PaymentPage() {
         .order("created_at", { ascending: false })
         .limit(1)
         .maybeSingle()
+      if (!enroll?.id) {
+        window.location.replace("/register")
+        return
+      }
+      if ((enroll as { payment_status?: string | null }).payment_status === "paid") {
+        window.location.replace("/dashboard")
+        return
+      }
 
+      // Then check profile stage for completeness, but do not bounce if missing
       const { data: profile } = await supabase
         .from("profiles")
         .select("onboarding_stage")
         .eq("id", userId)
         .maybeSingle()
-
       const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
-      const paymentStatus = (enroll as { payment_status?: string | null } | null)?.payment_status
-
-      if (paymentStatus === "paid" || stage === "active") {
+      if (stage === "active") {
         window.location.replace("/dashboard")
         return
       }
-
-      if (!enroll?.id && stage !== "payment_pending") {
-        window.location.replace("/register")
-        return
-      }
-      // If stage is payment_pending or an enrollment exists, stay on payment page
+      // If stage isn't set to payment_pending yet but enrollment exists, stay on payment page
     }
     void checkAuth()
     return () => {
