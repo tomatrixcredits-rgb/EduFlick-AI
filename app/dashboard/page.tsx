@@ -47,6 +47,18 @@ export default function DashboardPage() {
         .limit(1)
         .maybeSingle()
 
+      // Gate dashboard access by payment status
+      if (typeof window !== "undefined") {
+        if (!enroll) {
+          window.location.replace("/register")
+          return
+        }
+        if ((enroll as { payment_status?: string | null }).payment_status !== "paid") {
+          window.location.replace("/register/payment")
+          return
+        }
+      }
+
       if (!isMounted) return
       setFullName((profile as { full_name?: string | null } | null)?.full_name ?? null)
       setEnrollment((enroll as Enrollment | null) ?? null)
