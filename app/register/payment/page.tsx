@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react"
 import Link from "next/link"
-import { useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 
 import { paymentPlans, type PaymentPlan } from "@/lib/plans"
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
@@ -65,6 +65,7 @@ const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ""
 
 export default function PaymentPage() {
   const searchParams = useSearchParams()
+  const router = useRouter()
   const [selectedPlan, setSelectedPlan] = useState<PaymentPlan>(paymentPlans[1]!)
   const [customerName, setCustomerName] = useState("")
   const [customerEmail, setCustomerEmail] = useState("")
@@ -240,6 +241,14 @@ export default function PaymentPage() {
             }
             setStatus("success")
             setMessage("Payment successful! Your enrollment is confirmed.")
+            // Redirect to dashboard so user can view their track and profile options
+            try {
+              router.replace("/dashboard?paid=1")
+            } catch {
+              if (typeof window !== "undefined") {
+                window.location.assign("/dashboard?paid=1")
+              }
+            }
           } catch {
             setStatus("error")
             setMessage("Payment succeeded, but we couldn't update your enrollment. Contact support.")
