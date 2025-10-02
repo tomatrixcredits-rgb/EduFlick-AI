@@ -81,53 +81,81 @@ export default function PaymentPage() {
       setMessage("Authentication is not configured. Please contact the Eduflick AI team.")
       return
     }
+
     let isMounted = true
-    const checkAuth = async () => {
+
+    const checkAccess = async () => {
       const { data } = await supabase.auth.getSession()
-      if (!data.session && isMounted) {
-        const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register/payment"
-        window.location.replace(`/signin?next=${encodeURIComponent(next)}`)
+      if (!data.session) {
+        if (isMounted) {
+          const next =
+            typeof window !== "undefined"
+              ? `${window.location.pathname}${window.location.search}`
+              : "/register/payment"
+          router.replace(`/signin?next=${encodeURIComponent(next)}`)
+        }
         return
       }
 
-      // If logged in, ensure there is a pending enrollment; otherwise send back to registration
       const { data: userData } = await supabase.auth.getUser()
       const userId = userData.user?.id
-      if (!userId) return
+      if (!userId) {
+        if (isMounted) {
+          setStatus("error")
+          setMessage("We could not verify your account. Please sign in again.")
+        }
+        return
+      }
 
-      const { data: enroll } = await supabase
-        .from("enrollments")
-        .select("id, payment_status")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const [{ data: profile, error: profileError }, { data: enroll, error: enrollError }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("onboarding_stage")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase
+          .from("enrollments")
+          .select("id, payment_status")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
 
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_stage")
-        .eq("id", userId)
-        .maybeSingle()
+      if (profileError && isMounted) {
+        setStatus("error")
+        setMessage("Unable to load your profile. Please refresh the page and try again.")
+        return
+      }
+
+      if (enrollError && isMounted) {
+        setStatus("error")
+        setMessage("Unable to load your enrollment. Please refresh the page and try again.")
+        return
+      }
 
       const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
       const paymentStatus = (enroll as { payment_status?: string | null } | null)?.payment_status
 
       if (paymentStatus === "paid" || stage === "active") {
-        window.location.replace("/dashboard")
+        router.replace("/dashboard")
         return
       }
 
-      if (!enroll?.id && stage !== "payment_pending") {
-        window.location.replace("/register")
+      if (stage === "payment_pending" || enroll?.id) {
+        // Allow the user to remain on the payment page when they have a pending enrollment
         return
       }
-      // If stage is payment_pending or an enrollment exists, stay on payment page
+
+      router.replace("/register")
     }
-    void checkAuth()
+
+    void checkAccess()
+
     return () => {
       isMounted = false
     }
-  }, [supabase])
+  }, [router, supabase])
 
   useEffect(() => {
     const name = searchParams.get("name")
