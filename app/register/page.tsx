@@ -6,6 +6,23 @@ import { useRouter } from "next/navigation"
 
 import { getSupabaseBrowserClient } from "@/lib/supabase/client"
 
+const paymentCompleteStatuses = new Set([
+  "paid",
+  "success",
+  "succeeded",
+  "captured",
+  "completed",
+])
+
+const awaitingPaymentStages = new Set([
+  "payment_pending",
+  "pending_payment",
+  "awaiting_payment",
+  "enrolled",
+  "registration_complete",
+  "payment_required",
+])
+
 const trackOptions = [
   {
     value: "ai-content",
@@ -84,16 +101,28 @@ export default function RegisterPage() {
 
       if (!isMounted) return
 
-      const profile = profileData as
-        | { onboarding_stage?: string | null; full_name?: string | null; phone?: string | null; email?: string | null }
+      const profileRecord = (Array.isArray(profileData)
+        ? profileData[0]
+        : profileData) as
+        | {
+            onboarding_stage?: string | null
+            full_name?: string | null
+            phone?: string | null
+            email?: string | null
+          }
         | null
-      const enrollment = enrollmentData as { payment_status?: string | null } | null
+      const enrollmentRecord = (Array.isArray(enrollmentData)
+        ? enrollmentData[0]
+        : enrollmentData) as { payment_status?: string | null } | null
 
-      const stage = profile?.onboarding_stage
-      const paymentStatus = enrollment?.payment_status
+      const stage = profileRecord?.onboarding_stage ?? null
+      const paymentStatus = enrollmentRecord?.payment_status ?? null
+      const normalisedStage = stage?.toLowerCase() ?? ""
+      const normalisedPaymentStatus = paymentStatus?.toLowerCase() ?? ""
 
       // Keep profile contact data in sync with the authenticated account details
-      const profileEmail = profile?.email?.trim()
+      const profileEmail = profileRecord?.email?.trim()
+ main
       if (authEmail && (!profileEmail || profileEmail.toLowerCase() !== authEmail.toLowerCase())) {
         await supabase
           .from("profiles")
@@ -102,11 +131,24 @@ export default function RegisterPage() {
           .catch(() => null)
       }
 
-      const profileFullName = profile?.full_name?.trim() || null
+      const metadataNameCandidates = [
+        user.user_metadata?.full_name,
+        user.user_metadata?.name,
+        user.user_metadata?.user_name,
+        [user.user_metadata?.given_name, user.user_metadata?.family_name]
+          .filter((value) => typeof value === "string" && value)
+          .join(" "),
+      ]
+
       const metadataFullName =
-        ((user.user_metadata?.full_name as string | undefined)?.trim() ||
-          (user.user_metadata?.name as string | undefined)?.trim() ||
-          null)
+        metadataNameCandidates
+          .map((value) =>
+            typeof value === "string" ? value.trim() : "",
+          )
+          .find((value) => value.length > 0) || null
+
+      const profileFullName = profileRecord?.full_name?.trim() || null
+ main
 
       const namesDiffer =
         profileFullName && metadataFullName
@@ -124,8 +166,44 @@ export default function RegisterPage() {
           .catch(() => null)
       }
 
-      const candidateName = metadataFullName || profileFullName
- main
+      let candidateName = metadataFullName || profileFullName || null
+
+      if (!candidateName && authEmail) {
+        const { data: registrationRows } = await supabase
+          .from("registrations")
+          .select("name")
+          .eq("email", authEmail)
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        const registrationName = (Array.isArray(registrationRows)
+          ? registrationRows[0]?.name
+          : registrationRows?.name) as string | undefined
+
+        const trimmedRegistrationName = registrationName?.trim()
+        if (trimmedRegistrationName) {
+          candidateName = trimmedRegistrationName
+          await supabase
+            .from("profiles")
+            .upsert(
+              { id: userId, full_name: trimmedRegistrationName },
+              { onConflict: "id" },
+            )
+            .catch(() => null)
+        }
+      }
+
+      if (!isMounted) return
+
+      if (!profileFullName && candidateName) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: candidateName })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      if (!isMounted) return
 
       if (candidateName && nameInputRef.current) {
         const currentValue = nameInputRef.current.value.trim()
@@ -134,7 +212,7 @@ export default function RegisterPage() {
         }
       }
 
-      const profilePhone = profile?.phone?.trim()
+      const profilePhone = profileRecord?.phone?.trim()
       if (profilePhone && phoneInputRef.current) {
         const currentValue = phoneInputRef.current.value.trim()
         if (!currentValue || !hasInitialisedPrefill.current) {
@@ -144,20 +222,21 @@ export default function RegisterPage() {
 
       hasInitialisedPrefill.current = true
 
-      const normalisedPaymentStatus = paymentStatus?.toLowerCase()
+      const hasCompletedPayment =
+        paymentCompleteStatuses.has(normalisedPaymentStatus) ||
+        normalisedStage === "active" ||
+        normalisedStage === "completed"
 
-      if (normalisedPaymentStatus === "paid" || stage === "active") {
+      if (hasCompletedPayment) {
+ main
         router.replace("/dashboard")
         return
       }
 
       const shouldRedirectToPayment =
-        stage === "payment_pending" ||
-        normalisedPaymentStatus === "pending" ||
-        normalisedPaymentStatus === "created" ||
-        normalisedPaymentStatus === "initiated" ||
-        normalisedPaymentStatus === "processing" ||
-        (!!enrollment && normalisedPaymentStatus !== "paid")
+        awaitingPaymentStages.has(normalisedStage) ||
+        (!!enrollmentRecord && !paymentCompleteStatuses.has(normalisedPaymentStatus))
+ main
 
       if (shouldRedirectToPayment) {
         router.replace("/register/payment")

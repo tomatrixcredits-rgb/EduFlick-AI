@@ -59,6 +59,23 @@ declare global {
   }
 }
 
+const paymentCompleteStatuses = new Set([
+  "paid",
+  "success",
+  "succeeded",
+  "captured",
+  "completed",
+])
+
+const awaitingPaymentStages = new Set([
+  "payment_pending",
+  "pending_payment",
+  "awaiting_payment",
+  "enrolled",
+  "registration_complete",
+  "payment_required",
+])
+
 const RAZORPAY_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js"
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ""
@@ -143,11 +160,14 @@ export default function PaymentPage() {
           .eq("id", userId)
           .maybeSingle(),
       ])
-
       if (!isMounted) return
 
-      const enrollment = enrollData as { id?: number; payment_status?: string | null } | null
-      const profile = profileData as
+      const enrollment = (Array.isArray(enrollData)
+        ? enrollData[0]
+        : enrollData) as { id?: number; payment_status?: string | null } | null
+      const profile = (Array.isArray(profileData)
+        ? profileData[0]
+        : profileData) as
         | {
             full_name?: string | null
             phone?: string | null
@@ -156,21 +176,65 @@ export default function PaymentPage() {
           }
         | null
 
-      const profileFullName = profile?.full_name?.trim()
-      if (profileFullName) {
-        setCustomerName((prev) => (prev ? prev : profileFullName))
-      } else {
-        const metadataFullName =
-          (user.user_metadata?.full_name as string | undefined)?.trim() ||
-          (user.user_metadata?.name as string | undefined)?.trim()
-        if (metadataFullName) {
-          setCustomerName((prev) => (prev ? prev : metadataFullName))
+      const metadataNameCandidates = [
+        user.user_metadata?.full_name,
+        user.user_metadata?.name,
+        user.user_metadata?.user_name,
+        [user.user_metadata?.given_name, user.user_metadata?.family_name]
+          .filter((value) => typeof value === "string" && value)
+          .join(" "),
+      ]
+
+      const metadataFullName =
+        metadataNameCandidates
+          .map((value) =>
+            typeof value === "string" ? value.trim() : "",
+          )
+          .find((value) => value.length > 0) || null
+
+      const profileFullName = profile?.full_name?.trim() || null
+
+      let candidateName = metadataFullName || profileFullName || null
+
+      if (!candidateName && user.email) {
+        const { data: registrationRows } = await supabase
+          .from("registrations")
+          .select("name")
+          .eq("email", user.email)
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        const registrationName = (Array.isArray(registrationRows)
+          ? registrationRows[0]?.name
+          : registrationRows?.name) as string | undefined
+
+        const trimmedRegistrationName = registrationName?.trim()
+        if (trimmedRegistrationName) {
+          candidateName = trimmedRegistrationName
           await supabase
             .from("profiles")
-            .update({ full_name: metadataFullName })
-            .eq("id", userId)
+            .upsert(
+              { id: userId, full_name: trimmedRegistrationName },
+              { onConflict: "id" },
+            )
             .catch(() => null)
         }
+      }
+
+      if (!isMounted) return
+
+      if (!profileFullName && candidateName) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: candidateName })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      if (!isMounted) return
+
+      if (candidateName) {
+        setCustomerName((prev) => (prev ? prev : candidateName))
       }
 
       const profilePhone = profile?.phone?.trim()
@@ -187,6 +251,9 @@ export default function PaymentPage() {
           .catch(() => null)
       }
 
+      if (!isMounted) return
+
+ main
       if (!enrollment) {
         router.replace("/register")
         return
@@ -194,16 +261,25 @@ export default function PaymentPage() {
 
       const paymentStatus = enrollment.payment_status
 
-      if (profile?.onboarding_stage === "active" || paymentStatus === "paid") {
+      const normalisedStage = profile?.onboarding_stage?.toLowerCase() ?? ""
+      const normalisedPaymentStatus = paymentStatus?.toLowerCase() ?? ""
+      const hasCompletedPayment =
+        paymentCompleteStatuses.has(normalisedPaymentStatus) ||
+        normalisedStage === "active" ||
+        normalisedStage === "completed"
+
+      if (hasCompletedPayment) {
+ main
         router.replace("/dashboard")
         return
       }
 
-      if (profile?.onboarding_stage === "payment_pending" || paymentStatus === "pending") {
-        return
-      }
+      const shouldRemainOnPayment =
+        awaitingPaymentStages.has(normalisedStage) ||
+        (!!enrollment && !paymentCompleteStatuses.has(normalisedPaymentStatus))
 
-      if (!paymentStatus) {
+      if (!shouldRemainOnPayment) {
+ main
         router.replace("/register")
       }
     }
