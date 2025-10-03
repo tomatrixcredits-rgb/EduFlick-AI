@@ -90,7 +90,7 @@ create table if not exists public.registrations (
   id bigserial primary key,
   name text not null,
   email text not null,
-  phone text not null,
+  phone text,
   track text not null,
   created_at timestamptz not null default now()
 );
