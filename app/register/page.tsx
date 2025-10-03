@@ -1,6 +1,6 @@
 "use client"
 
-import { FormEvent, useEffect, useMemo, useState } from "react"
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
 
@@ -31,6 +31,7 @@ export default function RegisterPage() {
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
   const [errors, setErrors] = useState<RegistrationErrors>({})
+  const emailInputRef = useRef<HTMLInputElement>(null)
 
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
@@ -41,34 +42,59 @@ export default function RegisterPage() {
       return
     }
     let isMounted = true
-    const checkAuth = async () => {
+    const bootstrapFlow = async () => {
       const { data } = await supabase.auth.getSession()
-      if (!data.session && isMounted) {
+      if (!isMounted) return
+      if (!data.session) {
         const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
         return
       }
 
-      // If logged in, redirect based on onboarding/enrollment status
       const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) return
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_stage, email")
-        .eq("id", userId)
-        .maybeSingle()
+      const user = userData.user
+      if (!user) {
+        router.replace("/signin")
+        return
+      }
+
+      const authEmail = user.email?.trim()
+      if (authEmail && emailInputRef.current) {
+        emailInputRef.current.value = authEmail
+      }
+
+      const userId = user.id
+      const [{ data: profile }, { data: enrollment }] = await Promise.all([
+        supabase
+          .from("profiles")
+          .select("onboarding_stage")
+          .eq("id", userId)
+          .maybeSingle(),
+        supabase
+          .from("enrollments")
+          .select("payment_status")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ])
+
+      if (!isMounted) return
+
       const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
-      if (stage === "active") {
+      const paymentStatus = (enrollment as { payment_status?: string | null } | null)?.payment_status
+
+      if (paymentStatus === "paid" || stage === "active") {
         router.replace("/dashboard")
         return
       }
-      if (stage === "payment_pending") {
+
+      if (paymentStatus === "pending" || stage === "payment_pending") {
         router.replace("/register/payment")
-        return
       }
     }
-    void checkAuth()
+
+    void bootstrapFlow()
     return () => {
       isMounted = false
     }
@@ -100,8 +126,8 @@ export default function RegisterPage() {
     try {
       // Keep email in sync with auth email
       const { data: userData } = await supabase!.auth.getUser()
-      const authEmail = userData.user?.email?.trim().toLowerCase()
-      if (authEmail && payload.email.trim().toLowerCase() !== authEmail) {
+      const authEmail = userData.user?.email?.trim()
+      if (authEmail) {
         payload.email = authEmail
       }
 
@@ -151,9 +177,13 @@ export default function RegisterPage() {
       }
 
       setStatus("success")
-      setMessage("Enrollment created. Proceed to payment.")
+      setMessage("Enrollment created. Redirecting to payment...")
       setErrors({})
       form.reset()
+
+      if (emailInputRef.current) {
+        emailInputRef.current.value = payload.email
+      }
 
       const query = new URLSearchParams({
         name: payload.name,
@@ -254,6 +284,7 @@ export default function RegisterPage() {
                 type="email"
                 name="email"
                 required
+                ref={emailInputRef}
                 placeholder="Enter your email"
                 aria-invalid={errors.email ? true : undefined}
                 className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"

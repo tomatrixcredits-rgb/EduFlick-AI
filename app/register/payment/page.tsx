@@ -76,61 +76,6 @@ export default function PaymentPage() {
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
   useEffect(() => {
-    if (!supabase) {
-      setStatus("error")
-      setMessage("Authentication is not configured. Please contact the Eduflick AI team.")
-      return
-    }
-    let isMounted = true
-    const checkAuth = async () => {
-      const { data } = await supabase.auth.getSession()
-      if (!data.session && isMounted) {
-        const next = typeof window !== "undefined" ? `${window.location.pathname}${window.location.search}` : "/register/payment"
-        window.location.replace(`/signin?next=${encodeURIComponent(next)}`)
-        return
-      }
-
-      // If logged in, ensure there is a pending enrollment; otherwise send back to registration
-      const { data: userData } = await supabase.auth.getUser()
-      const userId = userData.user?.id
-      if (!userId) return
-      // Check latest enrollment first
-      const { data: enroll } = await supabase
-        .from("enrollments")
-        .select("id, payment_status")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
-      if (!enroll?.id) {
-        window.location.replace("/register")
-        return
-      }
-      if ((enroll as { payment_status?: string | null }).payment_status === "paid") {
-        window.location.replace("/dashboard")
-        return
-      }
-
-      // Then check profile stage for completeness, but do not bounce if missing
-      const { data: profile } = await supabase
-        .from("profiles")
-        .select("onboarding_stage")
-        .eq("id", userId)
-        .maybeSingle()
-      const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
-      if (stage === "active") {
-        window.location.replace("/dashboard")
-        return
-      }
-      // If stage isn't set to payment_pending yet but enrollment exists, stay on payment page
-    }
-    void checkAuth()
-    return () => {
-      isMounted = false
-    }
-  }, [supabase])
-
-  useEffect(() => {
     const name = searchParams.get("name")
     const email = searchParams.get("email")
     const contact = searchParams.get("phone")
@@ -140,13 +85,78 @@ export default function PaymentPage() {
     }
 
     if (email) {
-      setCustomerEmail(email)
+      setCustomerEmail((prev) => (prev ? prev : email))
     }
 
     if (contact) {
       setCustomerContact(contact)
     }
   }, [searchParams])
+
+  useEffect(() => {
+    if (!supabase) {
+      setStatus("error")
+      setMessage("Authentication is not configured. Please contact the Eduflick AI team.")
+      return
+    }
+
+    let isMounted = true
+
+    const bootstrapPayment = async () => {
+      const { data } = await supabase.auth.getSession()
+      if (!isMounted) return
+
+      if (!data.session) {
+        const next =
+          typeof window !== "undefined"
+            ? `${window.location.pathname}${window.location.search}`
+            : "/register/payment"
+        router.replace(`/signin?next=${encodeURIComponent(next)}`)
+        return
+      }
+
+      const { data: userData } = await supabase.auth.getUser()
+      const user = userData.user
+
+      if (!user) {
+        setStatus("error")
+        setMessage("We could not verify your account. Please sign in again.")
+        return
+      }
+
+      if (user.email && isMounted) {
+        setCustomerEmail(user.email)
+      }
+
+      const userId = user.id
+      const { data: enroll } = await supabase
+        .from("enrollments")
+        .select("id, payment_status")
+        .eq("user_id", userId)
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .maybeSingle()
+
+      if (!isMounted) return
+
+      if (!enroll) {
+        router.replace("/register")
+        return
+      }
+
+      const paymentStatus = (enroll as { payment_status?: string | null }).payment_status
+
+      if (paymentStatus === "paid") {
+        router.replace("/dashboard")
+      }
+    }
+
+    void bootstrapPayment()
+
+    return () => {
+      isMounted = false
+    }
+  }, [router, supabase])
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -269,12 +279,17 @@ export default function PaymentPage() {
             const { data: userData } = await supabase!.auth.getUser()
             const userId = userData.user?.id
             if (userId) {
-              await fetch("/api/enroll/paid", {
+              const response = await fetch("/api/enroll/paid", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId, planId: selectedPlan.id }),
               })
+
+              if (!response.ok) {
+                throw new Error()
+              }
             }
+
             setStatus("success")
             setMessage("Payment successful! Your enrollment is confirmed.")
           } catch {
@@ -286,9 +301,10 @@ export default function PaymentPage() {
             try {
               checkout?.close()
             } catch {}
+
             if (typeof window !== "undefined") {
               setTimeout(() => {
-                window.location.assign("/dashboard?paid=1")
+                window.location.assign("/dashboard")
               }, 100)
             }
           }
