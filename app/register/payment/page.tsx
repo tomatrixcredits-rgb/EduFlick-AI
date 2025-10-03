@@ -112,6 +112,7 @@ export default function PaymentPage() {
             ? `${window.location.pathname}${window.location.search}`
             : "/register/payment"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
+ main
         return
       }
 
@@ -143,6 +144,7 @@ export default function PaymentPage() {
         router.replace("/register")
         return
       }
+ main
 
       const paymentStatus = (enroll as { payment_status?: string | null }).payment_status
 
