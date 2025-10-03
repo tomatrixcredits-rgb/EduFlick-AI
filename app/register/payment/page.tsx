@@ -269,7 +269,6 @@ export default function PaymentPage() {
         normalisedStage === "completed"
 
       if (hasCompletedPayment) {
- main
         router.replace("/dashboard")
         return
       }
@@ -279,7 +278,6 @@ export default function PaymentPage() {
         (!!enrollment && !paymentCompleteStatuses.has(normalisedPaymentStatus))
 
       if (!shouldRemainOnPayment) {
- main
         router.replace("/register")
       }
     }

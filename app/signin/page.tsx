@@ -133,6 +133,36 @@ export default function SignInPage() {
           setError(signInError.message)
           return
         }
+
+        // Keep profile name/email in sync after password sign-in
+        try {
+          const { data: userData } = await supabase.auth.getUser()
+          const user = userData.user
+          if (user?.id) {
+            const metadataNameCandidates = [
+              user.user_metadata?.full_name,
+              user.user_metadata?.name,
+              user.user_metadata?.user_name,
+              [user.user_metadata?.given_name, user.user_metadata?.family_name]
+                .filter((value) => typeof value === "string" && value)
+                .join(" "),
+            ]
+            const metadataFullName =
+              metadataNameCandidates
+                .map((value) => (typeof value === "string" ? value.trim() : ""))
+                .find((value) => value.length > 0) || undefined
+
+            await fetch("/api/profile", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                userId: user.id,
+                full_name: metadataFullName,
+                email: user.email ?? undefined,
+              }),
+            }).catch(() => {})
+          }
+        } catch {}
       } else {
         const nextParam = searchParams.get("next")
         const emailRedirectTo = `${window.location.origin}/signin${nextParam ? `?next=${encodeURIComponent(nextParam)}` : ""}`

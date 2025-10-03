@@ -48,6 +48,7 @@ export default function RegisterPage() {
   const [status, setStatus] = useState<"idle" | "success" | "error">("idle")
   const [message, setMessage] = useState("")
   const [errors, setErrors] = useState<RegistrationErrors>({})
+  const [isNameReadonly, setIsNameReadonly] = useState(false)
   const emailInputRef = useRef<HTMLInputElement>(null)
   const nameInputRef = useRef<HTMLInputElement>(null)
   const phoneInputRef = useRef<HTMLInputElement>(null)
@@ -148,7 +149,6 @@ export default function RegisterPage() {
           .find((value) => value.length > 0) || null
 
       const profileFullName = profileRecord?.full_name?.trim() || null
- main
 
       const namesDiffer =
         profileFullName && metadataFullName
@@ -158,7 +158,6 @@ export default function RegisterPage() {
           : false
 
       if (metadataFullName && (!profileFullName || namesDiffer)) {
- main
         await supabase
           .from("profiles")
           .update({ full_name: metadataFullName })
@@ -211,6 +210,7 @@ export default function RegisterPage() {
           nameInputRef.current.value = candidateName
         }
       }
+      setIsNameReadonly(Boolean(candidateName))
 
       const profilePhone = profileRecord?.phone?.trim()
       if (profilePhone && phoneInputRef.current) {
@@ -228,7 +228,6 @@ export default function RegisterPage() {
         normalisedStage === "completed"
 
       if (hasCompletedPayment) {
- main
         router.replace("/dashboard")
         return
       }
@@ -236,7 +235,6 @@ export default function RegisterPage() {
       const shouldRedirectToPayment =
         awaitingPaymentStages.has(normalisedStage) ||
         (!!enrollmentRecord && !paymentCompleteStatuses.has(normalisedPaymentStatus))
- main
 
       if (shouldRedirectToPayment) {
         router.replace("/register/payment")
@@ -434,22 +432,26 @@ export default function RegisterPage() {
                   name="name"
                   required
                   ref={nameInputRef}
-                  placeholder="Enter your full name"
+                  placeholder={isNameReadonly ? "Automatically detected from your account" : "Enter your full name"}
+                  readOnly={isNameReadonly}
                   aria-invalid={errors.name ? true : undefined}
-                  className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                  className={`w-full rounded-xl border px-4 py-3 text-sm focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40 ${
+                    isNameReadonly
+                      ? "border-blue-200/20 bg-[#060f2d]/50 text-white/80 placeholder:text-blue-100/50"
+                      : "border-blue-200/20 bg-[#060f2d]/80 text-white placeholder:text-blue-100/50"
+                  }`}
                 />
                 {errors.name?.length ? (
                   <p className="text-xs text-red-300">{errors.name[0]}</p>
                 ) : null}
               </label>
               <label className="space-y-2 text-sm text-blue-100/80">
-                <span className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Phone number</span>
+                <span className="text-xs font-semibold uppercase tracking-wide text-blue-100/70">Phone number (optional)</span>
                 <input
                   type="tel"
                   name="phone"
-                  required
                   ref={phoneInputRef}
-                  placeholder="Enter your phone number"
+                  placeholder="Enter your phone number (optional)"
                   aria-invalid={errors.phone ? true : undefined}
                   className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
                 />
@@ -465,10 +467,10 @@ export default function RegisterPage() {
                 name="email"
                 required
                 ref={emailInputRef}
-                placeholder="Enter your email"
+                placeholder="Automatically detected from your account"
                 readOnly
                 aria-invalid={errors.email ? true : undefined}
-                className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
+                className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/50 px-4 py-3 text-sm text-white/80 placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
               />
               {errors.email?.length ? (
                 <p className="text-xs text-red-300">{errors.email[0]}</p>

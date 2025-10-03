@@ -19,9 +19,10 @@ const registrationSchema = z
       .string({ required_error: "Email is required" })
       .email("Please enter a valid email address"),
     phone: z
-      .string({ required_error: "Phone number is required" })
-      .min(6, "Phone number is too short")
-      .max(40, "Phone number is too long"),
+      .preprocess((value) => {
+        if (typeof value === "string" && value.trim() === "") return undefined
+        return value
+      }, z.string().min(6, "Phone number is too short").max(40, "Phone number is too long").optional()),
     track: trackSchema,
     company: z.string().optional(),
   })
@@ -75,7 +76,7 @@ export async function POST(request: Request) {
   const { error } = await supabase.from("registrations").insert({
     name,
     email,
-    phone,
+    phone: phone ?? null,
     track,
   })
 
