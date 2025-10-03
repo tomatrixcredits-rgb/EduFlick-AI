@@ -32,6 +32,9 @@ export default function RegisterPage() {
   const [message, setMessage] = useState("")
   const [errors, setErrors] = useState<RegistrationErrors>({})
   const emailInputRef = useRef<HTMLInputElement>(null)
+  const nameInputRef = useRef<HTMLInputElement>(null)
+  const phoneInputRef = useRef<HTMLInputElement>(null)
+  const hasInitialisedPrefill = useRef(false)
 
   const supabase = useMemo(() => getSupabaseBrowserClient(), [])
 
@@ -64,10 +67,10 @@ export default function RegisterPage() {
       }
 
       const userId = user.id
-      const [{ data: profile }, { data: enrollment }] = await Promise.all([
+      const [{ data: profileData }, { data: enrollmentData }] = await Promise.all([
         supabase
           .from("profiles")
-          .select("onboarding_stage")
+          .select("onboarding_stage, full_name, phone, email")
           .eq("id", userId)
           .maybeSingle(),
         supabase
@@ -81,16 +84,82 @@ export default function RegisterPage() {
 
       if (!isMounted) return
 
-      const stage = (profile as { onboarding_stage?: string | null } | null)?.onboarding_stage
-      const paymentStatus = (enrollment as { payment_status?: string | null } | null)?.payment_status
+      const profile = profileData as
+        | { onboarding_stage?: string | null; full_name?: string | null; phone?: string | null; email?: string | null }
+        | null
+      const enrollment = enrollmentData as { payment_status?: string | null } | null
 
-      if (paymentStatus === "paid" || stage === "active") {
+      const stage = profile?.onboarding_stage
+      const paymentStatus = enrollment?.payment_status
+
+      // Keep profile contact data in sync with the authenticated account details
+      const profileEmail = profile?.email?.trim()
+      if (authEmail && (!profileEmail || profileEmail.toLowerCase() !== authEmail.toLowerCase())) {
+        await supabase
+          .from("profiles")
+          .update({ email: authEmail })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      const profileFullName = profile?.full_name?.trim() || null
+      const metadataFullName =
+        ((user.user_metadata?.full_name as string | undefined)?.trim() ||
+          (user.user_metadata?.name as string | undefined)?.trim() ||
+          null)
+
+      const namesDiffer =
+        profileFullName && metadataFullName
+          ? profileFullName.localeCompare(metadataFullName, undefined, {
+              sensitivity: "base",
+            }) !== 0
+          : false
+
+      if (metadataFullName && (!profileFullName || namesDiffer)) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: metadataFullName })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      const candidateName = metadataFullName || profileFullName
+
+      if (candidateName && nameInputRef.current) {
+        const currentValue = nameInputRef.current.value.trim()
+        if (!currentValue || !hasInitialisedPrefill.current) {
+          nameInputRef.current.value = candidateName
+        }
+      }
+
+      const profilePhone = profile?.phone?.trim()
+      if (profilePhone && phoneInputRef.current) {
+        const currentValue = phoneInputRef.current.value.trim()
+        if (!currentValue || !hasInitialisedPrefill.current) {
+          phoneInputRef.current.value = profilePhone
+        }
+      }
+
+      hasInitialisedPrefill.current = true
+
+      const normalisedPaymentStatus = paymentStatus?.toLowerCase()
+
+      if (normalisedPaymentStatus === "paid" || stage === "active") {
         router.replace("/dashboard")
         return
       }
 
-      if (paymentStatus === "pending" || stage === "payment_pending") {
+      const shouldRedirectToPayment =
+        stage === "payment_pending" ||
+        normalisedPaymentStatus === "pending" ||
+        normalisedPaymentStatus === "created" ||
+        normalisedPaymentStatus === "initiated" ||
+        normalisedPaymentStatus === "processing" ||
+        (!!enrollment && normalisedPaymentStatus !== "paid")
+
+      if (shouldRedirectToPayment) {
         router.replace("/register/payment")
+        return
       }
     }
 
@@ -203,8 +272,14 @@ export default function RegisterPage() {
       setErrors({})
       form.reset()
 
+      if (nameInputRef.current) {
+        nameInputRef.current.value = payload.name
+      }
       if (emailInputRef.current) {
         emailInputRef.current.value = payload.email
+      }
+      if (phoneInputRef.current) {
+        phoneInputRef.current.value = payload.phone
       }
 
       const query = new URLSearchParams({
@@ -277,6 +352,7 @@ export default function RegisterPage() {
                   type="text"
                   name="name"
                   required
+                  ref={nameInputRef}
                   placeholder="Enter your full name"
                   aria-invalid={errors.name ? true : undefined}
                   className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
@@ -291,6 +367,7 @@ export default function RegisterPage() {
                   type="tel"
                   name="phone"
                   required
+                  ref={phoneInputRef}
                   placeholder="Enter your phone number"
                   aria-invalid={errors.phone ? true : undefined}
                   className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
@@ -308,6 +385,7 @@ export default function RegisterPage() {
                 required
                 ref={emailInputRef}
                 placeholder="Enter your email"
+                readOnly
                 aria-invalid={errors.email ? true : undefined}
                 className="w-full rounded-xl border border-blue-200/20 bg-[#060f2d]/80 px-4 py-3 text-sm text-white placeholder:text-blue-100/50 focus:border-blue-400 focus:outline-none focus:ring-2 focus:ring-blue-400/40"
               />

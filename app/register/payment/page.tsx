@@ -81,7 +81,7 @@ export default function PaymentPage() {
     const contact = searchParams.get("phone")
 
     if (name) {
-      setCustomerName(name)
+      setCustomerName((prev) => (prev ? prev : name))
     }
 
     if (email) {
@@ -89,7 +89,7 @@ export default function PaymentPage() {
     }
 
     if (contact) {
-      setCustomerContact(contact)
+      setCustomerContact((prev) => (prev ? prev : contact))
     }
   }, [searchParams])
 
@@ -112,7 +112,6 @@ export default function PaymentPage() {
             ? `${window.location.pathname}${window.location.search}`
             : "/register/payment"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
- main
         return
       }
 
@@ -130,26 +129,82 @@ export default function PaymentPage() {
       }
 
       const userId = user.id
-      const { data: enroll } = await supabase
-        .from("enrollments")
-        .select("id, payment_status")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const [{ data: enrollData }, { data: profileData }] = await Promise.all([
+        supabase
+          .from("enrollments")
+          .select("id, payment_status")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("full_name, phone, email, onboarding_stage")
+          .eq("id", userId)
+          .maybeSingle(),
+      ])
 
       if (!isMounted) return
 
-      if (!enroll) {
+      const enrollment = enrollData as { id?: number; payment_status?: string | null } | null
+      const profile = profileData as
+        | {
+            full_name?: string | null
+            phone?: string | null
+            email?: string | null
+            onboarding_stage?: string | null
+          }
+        | null
+
+      const profileFullName = profile?.full_name?.trim()
+      if (profileFullName) {
+        setCustomerName((prev) => (prev ? prev : profileFullName))
+      } else {
+        const metadataFullName =
+          (user.user_metadata?.full_name as string | undefined)?.trim() ||
+          (user.user_metadata?.name as string | undefined)?.trim()
+        if (metadataFullName) {
+          setCustomerName((prev) => (prev ? prev : metadataFullName))
+          await supabase
+            .from("profiles")
+            .update({ full_name: metadataFullName })
+            .eq("id", userId)
+            .catch(() => null)
+        }
+      }
+
+      const profilePhone = profile?.phone?.trim()
+      if (profilePhone) {
+        setCustomerContact((prev) => (prev ? prev : profilePhone))
+      }
+
+      const profileEmail = profile?.email?.trim()
+      if (user.email && (!profileEmail || profileEmail.toLowerCase() !== user.email.toLowerCase())) {
+        await supabase
+          .from("profiles")
+          .update({ email: user.email })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      if (!enrollment) {
         router.replace("/register")
         return
       }
- main
 
-      const paymentStatus = (enroll as { payment_status?: string | null }).payment_status
+      const paymentStatus = enrollment.payment_status
 
-      if (paymentStatus === "paid") {
+      if (profile?.onboarding_stage === "active" || paymentStatus === "paid") {
         router.replace("/dashboard")
+        return
+      }
+
+      if (profile?.onboarding_stage === "payment_pending" || paymentStatus === "pending") {
+        return
+      }
+
+      if (!paymentStatus) {
+        router.replace("/register")
       }
     }
 
