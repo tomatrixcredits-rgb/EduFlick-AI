@@ -160,7 +160,6 @@ export default function PaymentPage() {
           .eq("id", userId)
           .maybeSingle(),
       ])
-
       if (!isMounted) return
 
       const enrollment = (Array.isArray(enrollData)
@@ -254,6 +253,7 @@ export default function PaymentPage() {
 
       if (!isMounted) return
 
+ main
       if (!enrollment) {
         router.replace("/register")
         return
@@ -269,6 +269,7 @@ export default function PaymentPage() {
         normalisedStage === "completed"
 
       if (hasCompletedPayment) {
+ main
         router.replace("/dashboard")
         return
       }
@@ -278,6 +279,7 @@ export default function PaymentPage() {
         (!!enrollment && !paymentCompleteStatuses.has(normalisedPaymentStatus))
 
       if (!shouldRemainOnPayment) {
+ main
         router.replace("/register")
       }
     }

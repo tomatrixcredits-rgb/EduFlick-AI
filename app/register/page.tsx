@@ -122,6 +122,7 @@ export default function RegisterPage() {
 
       // Keep profile contact data in sync with the authenticated account details
       const profileEmail = profileRecord?.email?.trim()
+ main
       if (authEmail && (!profileEmail || profileEmail.toLowerCase() !== authEmail.toLowerCase())) {
         await supabase
           .from("profiles")
@@ -147,6 +148,7 @@ export default function RegisterPage() {
           .find((value) => value.length > 0) || null
 
       const profileFullName = profileRecord?.full_name?.trim() || null
+ main
 
       const namesDiffer =
         profileFullName && metadataFullName
@@ -156,6 +158,7 @@ export default function RegisterPage() {
           : false
 
       if (metadataFullName && (!profileFullName || namesDiffer)) {
+ main
         await supabase
           .from("profiles")
           .update({ full_name: metadataFullName })
@@ -225,6 +228,7 @@ export default function RegisterPage() {
         normalisedStage === "completed"
 
       if (hasCompletedPayment) {
+ main
         router.replace("/dashboard")
         return
       }
@@ -232,6 +236,7 @@ export default function RegisterPage() {
       const shouldRedirectToPayment =
         awaitingPaymentStages.has(normalisedStage) ||
         (!!enrollmentRecord && !paymentCompleteStatuses.has(normalisedPaymentStatus))
+ main
 
       if (shouldRedirectToPayment) {
         router.replace("/register/payment")
