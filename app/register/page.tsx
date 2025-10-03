@@ -116,6 +116,7 @@ export default function RegisterPage() {
           : false
 
       if (metadataFullName && (!profileFullName || namesDiffer)) {
+ main
         await supabase
           .from("profiles")
           .update({ full_name: metadataFullName })
@@ -124,6 +125,7 @@ export default function RegisterPage() {
       }
 
       const candidateName = metadataFullName || profileFullName
+ main
 
       if (candidateName && nameInputRef.current) {
         const currentValue = nameInputRef.current.value.trim()
