@@ -176,6 +176,28 @@ export default function RegisterPage() {
         return
       }
 
+      // Ensure the onboarding stage has been updated before navigating so that
+      // the payment guard does not bounce the user back to registration.
+      let confirmedPaymentPending = false
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        const { data: latestProfile } = await supabase!
+          .from("profiles")
+          .select("onboarding_stage")
+          .eq("id", userId)
+          .maybeSingle()
+
+        const latestStage = (
+          latestProfile as { onboarding_stage?: string | null } | null
+        )?.onboarding_stage
+
+        if (latestStage === "payment_pending") {
+          confirmedPaymentPending = true
+          break
+        }
+
+        await new Promise((resolve) => setTimeout(resolve, 400))
+      }
+
       setStatus("success")
       setMessage("Enrollment created. Redirecting to payment...")
       setErrors({})
