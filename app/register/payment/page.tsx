@@ -281,12 +281,17 @@ export default function PaymentPage() {
             const { data: userData } = await supabase!.auth.getUser()
             const userId = userData.user?.id
             if (userId) {
-              await fetch("/api/enroll/paid", {
+              const response = await fetch("/api/enroll/paid", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({ userId, planId: selectedPlan.id }),
               })
+
+              if (!response.ok) {
+                throw new Error()
+              }
             }
+
             setStatus("success")
             setMessage("Payment successful! Your enrollment is confirmed.")
           } catch {
@@ -298,9 +303,10 @@ export default function PaymentPage() {
             try {
               checkout?.close()
             } catch {}
+
             if (typeof window !== "undefined") {
               setTimeout(() => {
-                window.location.assign("/dashboard?paid=1")
+                window.location.assign("/dashboard")
               }, 100)
             }
           }
