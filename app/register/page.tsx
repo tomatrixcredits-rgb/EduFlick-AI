@@ -102,11 +102,21 @@ export default function RegisterPage() {
           .catch(() => null)
       }
 
-      const profileFullName = profile?.full_name?.trim()
+      const profileFullName = profile?.full_name?.trim() || null
       const metadataFullName =
-        (user.user_metadata?.full_name as string | undefined)?.trim() ||
-        (user.user_metadata?.name as string | undefined)?.trim()
-      if (!profileFullName && metadataFullName) {
+        ((user.user_metadata?.full_name as string | undefined)?.trim() ||
+          (user.user_metadata?.name as string | undefined)?.trim() ||
+          null)
+
+      const namesDiffer =
+        profileFullName && metadataFullName
+          ? profileFullName.localeCompare(metadataFullName, undefined, {
+              sensitivity: "base",
+            }) !== 0
+          : false
+
+      if (metadataFullName && (!profileFullName || namesDiffer)) {
+ main
         await supabase
           .from("profiles")
           .update({ full_name: metadataFullName })
@@ -114,7 +124,8 @@ export default function RegisterPage() {
           .catch(() => null)
       }
 
-      const candidateName = profileFullName || metadataFullName
+      const candidateName = metadataFullName || profileFullName
+ main
 
       if (candidateName && nameInputRef.current) {
         const currentValue = nameInputRef.current.value.trim()
@@ -133,12 +144,22 @@ export default function RegisterPage() {
 
       hasInitialisedPrefill.current = true
 
-      if (paymentStatus === "paid" || stage === "active") {
+      const normalisedPaymentStatus = paymentStatus?.toLowerCase()
+
+      if (normalisedPaymentStatus === "paid" || stage === "active") {
         router.replace("/dashboard")
         return
       }
 
-      if (paymentStatus === "pending" || stage === "payment_pending") {
+      const shouldRedirectToPayment =
+        stage === "payment_pending" ||
+        normalisedPaymentStatus === "pending" ||
+        normalisedPaymentStatus === "created" ||
+        normalisedPaymentStatus === "initiated" ||
+        normalisedPaymentStatus === "processing" ||
+        (!!enrollment && normalisedPaymentStatus !== "paid")
+
+      if (shouldRedirectToPayment) {
         router.replace("/register/payment")
         return
       }
