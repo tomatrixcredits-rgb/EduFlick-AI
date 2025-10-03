@@ -59,6 +59,23 @@ declare global {
   }
 }
 
+const paymentCompleteStatuses = new Set([
+  "paid",
+  "success",
+  "succeeded",
+  "captured",
+  "completed",
+])
+
+const awaitingPaymentStages = new Set([
+  "payment_pending",
+  "pending_payment",
+  "awaiting_payment",
+  "enrolled",
+  "registration_complete",
+  "payment_required",
+])
+
 const RAZORPAY_SCRIPT_SRC = "https://checkout.razorpay.com/v1/checkout.js"
 
 const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID ?? ""
@@ -81,7 +98,7 @@ export default function PaymentPage() {
     const contact = searchParams.get("phone")
 
     if (name) {
-      setCustomerName(name)
+      setCustomerName((prev) => (prev ? prev : name))
     }
 
     if (email) {
@@ -89,7 +106,7 @@ export default function PaymentPage() {
     }
 
     if (contact) {
-      setCustomerContact(contact)
+      setCustomerContact((prev) => (prev ? prev : contact))
     }
   }, [searchParams])
 
@@ -112,7 +129,6 @@ export default function PaymentPage() {
             ? `${window.location.pathname}${window.location.search}`
             : "/register/payment"
         router.replace(`/signin?next=${encodeURIComponent(next)}`)
- main
         return
       }
 
@@ -130,26 +146,139 @@ export default function PaymentPage() {
       }
 
       const userId = user.id
-      const { data: enroll } = await supabase
-        .from("enrollments")
-        .select("id, payment_status")
-        .eq("user_id", userId)
-        .order("created_at", { ascending: false })
-        .limit(1)
-        .maybeSingle()
+      const [{ data: enrollData }, { data: profileData }] = await Promise.all([
+        supabase
+          .from("enrollments")
+          .select("id, payment_status")
+          .eq("user_id", userId)
+          .order("created_at", { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+        supabase
+          .from("profiles")
+          .select("full_name, phone, email, onboarding_stage")
+          .eq("id", userId)
+          .maybeSingle(),
+      ])
 
       if (!isMounted) return
 
-      if (!enroll) {
+      const enrollment = (Array.isArray(enrollData)
+        ? enrollData[0]
+        : enrollData) as { id?: number; payment_status?: string | null } | null
+      const profile = (Array.isArray(profileData)
+        ? profileData[0]
+        : profileData) as
+        | {
+            full_name?: string | null
+            phone?: string | null
+            email?: string | null
+            onboarding_stage?: string | null
+          }
+        | null
+
+      const metadataNameCandidates = [
+        user.user_metadata?.full_name,
+        user.user_metadata?.name,
+        user.user_metadata?.user_name,
+        [user.user_metadata?.given_name, user.user_metadata?.family_name]
+          .filter((value) => typeof value === "string" && value)
+          .join(" "),
+      ]
+
+      const metadataFullName =
+        metadataNameCandidates
+          .map((value) =>
+            typeof value === "string" ? value.trim() : "",
+          )
+          .find((value) => value.length > 0) || null
+
+      const profileFullName = profile?.full_name?.trim() || null
+
+      let candidateName = metadataFullName || profileFullName || null
+
+      if (!candidateName && user.email) {
+        const { data: registrationRows } = await supabase
+          .from("registrations")
+          .select("name")
+          .eq("email", user.email)
+          .order("created_at", { ascending: false })
+          .limit(1)
+
+        const registrationName = (Array.isArray(registrationRows)
+          ? registrationRows[0]?.name
+          : registrationRows?.name) as string | undefined
+
+        const trimmedRegistrationName = registrationName?.trim()
+        if (trimmedRegistrationName) {
+          candidateName = trimmedRegistrationName
+          await supabase
+            .from("profiles")
+            .upsert(
+              { id: userId, full_name: trimmedRegistrationName },
+              { onConflict: "id" },
+            )
+            .catch(() => null)
+        }
+      }
+
+      if (!isMounted) return
+
+      if (!profileFullName && candidateName) {
+        await supabase
+          .from("profiles")
+          .update({ full_name: candidateName })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      if (!isMounted) return
+
+      if (candidateName) {
+        setCustomerName((prev) => (prev ? prev : candidateName))
+      }
+
+      const profilePhone = profile?.phone?.trim()
+      if (profilePhone) {
+        setCustomerContact((prev) => (prev ? prev : profilePhone))
+      }
+
+      const profileEmail = profile?.email?.trim()
+      if (user.email && (!profileEmail || profileEmail.toLowerCase() !== user.email.toLowerCase())) {
+        await supabase
+          .from("profiles")
+          .update({ email: user.email })
+          .eq("id", userId)
+          .catch(() => null)
+      }
+
+      if (!isMounted) return
+
+      if (!enrollment) {
         router.replace("/register")
         return
       }
- main
 
-      const paymentStatus = (enroll as { payment_status?: string | null }).payment_status
+      const paymentStatus = enrollment.payment_status
 
-      if (paymentStatus === "paid") {
+      const normalisedStage = profile?.onboarding_stage?.toLowerCase() ?? ""
+      const normalisedPaymentStatus = paymentStatus?.toLowerCase() ?? ""
+      const hasCompletedPayment =
+        paymentCompleteStatuses.has(normalisedPaymentStatus) ||
+        normalisedStage === "active" ||
+        normalisedStage === "completed"
+
+      if (hasCompletedPayment) {
         router.replace("/dashboard")
+        return
+      }
+
+      const shouldRemainOnPayment =
+        awaitingPaymentStages.has(normalisedStage) ||
+        (!!enrollment && !paymentCompleteStatuses.has(normalisedPaymentStatus))
+
+      if (!shouldRemainOnPayment) {
+        router.replace("/register")
       }
     }
 
